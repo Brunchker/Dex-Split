@@ -11,7 +11,7 @@ local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
-local API_URL = "https://56139eae-b21c-4480-af4c-f9dd0bbd2de1-00-271ukmzv6kack.worf.replit.dev/validate"
+local API_URL = "https://48419562-8f46-4595-b1e2-b444bef87d8b-00-2y6rc1294ioti.janeway.replit.dev/validate"
 
 -- ==========================================
 -- UI DA KEY SYSTEM
