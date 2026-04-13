@@ -1,5 +1,5 @@
 -- ==========================================
--- 🔐 DEX UNIVERSAL TD: IMAGE HOTBAR + KEY SYSTEM (MELHORADO)
+-- 🔐 DEX UNIVERSAL TD: IMAGE HOTBAR + KEY SYSTEM (SCANNER v5 UNIVERSAL)
 -- ==========================================
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local Debris = game:GetService("Debris")
 
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
@@ -15,7 +16,7 @@ local API_URL = "https://378a1bde-b6e1-4db4-aff1-0cc7474cfd3c-00-2thtejootj7d7.k
 local KEY_FILE = "Dex_Ultra_Key.txt"
 
 -- ==========================================
--- UI DA KEY SYSTEM
+-- UI DA KEY SYSTEM (inalterada)
 -- ==========================================
 local targetParent
 pcall(function() targetParent = (gethui and gethui()) or game:GetService("CoreGui") end)
@@ -33,6 +34,7 @@ frame.Size = UDim2.new(0, 360, 0, 210)
 frame.Position = UDim2.new(0.5, -180, 0.5, -105)
 frame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 18)
+
 local keyStroke = Instance.new("UIStroke", frame)
 keyStroke.Color = Color3.fromRGB(0, 200, 255)
 keyStroke.Thickness = 2
@@ -73,6 +75,7 @@ local function loadDex()
     keyGui:Destroy()
 
     local FILE = "Dex_Ultra_Loadouts.json"
+
     local function loadFile()
         if isfile and isfile(FILE) then
             local success, result = pcall(function() return HttpService:JSONDecode(readfile(FILE)) end)
@@ -80,9 +83,11 @@ local function loadDex()
         end
         return {}
     end
+
     local function saveFile(data)
         if writefile then pcall(function() writefile(FILE, HttpService:JSONEncode(data)) end) end
     end
+
     local Saves = loadFile()
     getgenv().SavedTowers = getgenv().SavedTowers or {}
 
@@ -90,68 +95,7 @@ local function loadDex()
     local rotation, heightOffset, autoOffset = 0, 0, 0
     local selectedSlot = nil
 
-    -- ==================== FUNÇÃO DETECTOR MELHORADO (DEX EXPLORER) ====================
-    local function getUniversalTowersFolder()
-        local bestFolder = nil
-        local maxScore = 0
-
-        local searchContainers = {
-            ReplicatedStorage,
-            workspace,
-            game:FindFirstChild("ServerStorage"),
-            game:FindFirstChild("StarterPack"),
-            game:FindFirstChild("StarterGui"),
-        }
-
-        local keywords = {"tower", "unit", "hero", "enemy", "wave", "shop", "buy", "place", "spawn", "tiers", "pack", "models"}
-
-        for _, container in ipairs(searchContainers) do
-            if container then
-                for _, desc in ipairs(container:GetDescendants()) do
-                    if desc:IsA("Folder") or desc:IsA("Model") then
-                        local modelCount = 0
-                        local nameLower = desc.Name:lower()
-
-                        for _, child in ipairs(desc:GetChildren()) do
-                            if child:IsA("Model") then modelCount += 1 end
-                        end
-
-                        local nameScore = 0
-                        for _, kw in ipairs(keywords) do
-                            if nameLower:find(kw) then nameScore += 30 end
-                        end
-
-                        local score = (modelCount * 12) + nameScore
-
-                        if modelCount >= 3 and score > maxScore then
-                            maxScore = score
-                            bestFolder = desc
-                        end
-                    end
-                end
-            end
-        end
-
-        -- Backup bruto
-        if not bestFolder then
-            for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
-                if (desc:IsA("Folder") or desc:IsA("Model")) and #desc:GetChildren() >= 5 then
-                    bestFolder = desc
-                    break
-                end
-            end
-        end
-
-        if bestFolder then
-            print("✅ DEX EXPLORER encontrou towers em: " .. bestFolder:GetFullName())
-            print("   Quantidade aproximada: " .. #bestFolder:GetChildren())
-        else
-            warn("⚠️ DEX não encontrou nenhuma pasta de towers!")
-        end
-
-        return bestFolder
-    end
-
+    -- ==================== FUNÇÕES AUXILIARES ====================
     local function getCleanName(rawName)
         local name = rawName
         name = string.gsub(name, "%[.-%]", "")
@@ -177,22 +121,97 @@ local function loadDex()
         return nil
     end
 
-    -- ==================== RESTO DO CÓDIGO (UI + Funcionamento) ====================
-    local tInfoHover = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-    local tInfoSlide = TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+    -- ==================== SCANNER UNIVERSAL v5 ====================
+    local function getUniversalTowersFolder()
+        local allTowerFolders = {}
+        local candidates = {}
 
-    local function playSound(id, pitch)
-        pcall(function()
-            local s = Instance.new("Sound", workspace)
-            s.SoundId = "rbxassetid://" .. id; s.Volume = 0.4; s.PlaybackSpeed = pitch or 1
-            s:Play(); game.Debris:AddItem(s, 2)
-        end)
+        local searchContainers = {
+            ReplicatedStorage,
+            workspace,
+            game:FindFirstChild("ServerStorage"),
+            game:FindFirstChild("StarterPack")
+        }
+
+        local keywords = {
+            "tower", "towers", "unit", "units", "hero", "heroes", "troop", "troops",
+            "upgrade", "upgrades", "template", "templates", "model", "models",
+            "enemy", "enemies", "shop", "buy", "place", "spawn", "tier"
+        }
+
+        local function isLikelyTowerFolder(folder)
+            if not (folder:IsA("Folder") or folder:IsA("Model")) then return false, 0 end
+            local nameLower = folder.Name:lower()
+            local children = folder:GetChildren()
+            local modelCount = 0
+
+            for _, child in ipairs(children) do
+                if child:IsA("Model") then modelCount += 1 end
+            end
+
+            -- Critério 1: Nome forte + Models
+            for _, kw in ipairs(keywords) do
+                if nameLower:find(kw) and modelCount >= 6 then
+                    return true, modelCount
+                end
+            end
+
+            -- Critério 2: Muitos Models (mesmo sem nome óbvio)
+            if modelCount >= 15 then
+                return true, modelCount
+            end
+
+            return false, modelCount
+        end
+
+        -- Busca profunda
+        for _, container in ipairs(searchContainers) do
+            if container then
+                for _, desc in ipairs(container:GetDescendants()) do
+                    local isTower, modelCount = isLikelyTowerFolder(desc)
+                    if isTower then
+                        table.insert(allTowerFolders, desc)
+                        table.insert(candidates, {folder = desc:GetFullName(), models = modelCount})
+                    end
+                end
+            end
+        end
+
+        -- Remove duplicatas
+        local unique = {}
+        for _, f in ipairs(allTowerFolders) do
+            unique[f:GetFullName()] = f
+        end
+        allTowerFolders = {}
+        for _, f in pairs(unique) do
+            table.insert(allTowerFolders, f)
+        end
+
+        -- Debug
+        print("🔍 DEX SCANNER v5 UNIVERSAL - Pastas detectadas: " .. #allTowerFolders)
+        table.sort(candidates, function(a,b) return a.models > b.models end)
+        for i, c in ipairs(candidates) do
+            if i <= 12 then
+                print(string.format("   Models: %d | %s", c.models, c.folder))
+            end
+        end
+
+        if #allTowerFolders == 0 then
+            warn("❌ Não encontrou pastas de torres. Jogo pode usar estrutura muito diferente.")
+        else
+            print("✅ Usando " .. #allTowerFolders .. " pasta(s) para carregar torres.")
+        end
+
+        return allTowerFolders
     end
 
+    -- ==================== RESTO DA UI E FUNCIONALIDADES ====================
     if targetParent:FindFirstChild("DexUltraTD") then targetParent.DexUltraTD:Destroy() end
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "DexUltraTD"; gui.ResetOnSpawn = false; gui.Parent = targetParent
+    gui.Name = "DexUltraTD"
+    gui.ResetOnSpawn = false
+    gui.Parent = targetParent
 
     local hotbarWrap = Instance.new("Frame", gui)
     hotbarWrap.Size = UDim2.new(0, 600, 0, 140)
@@ -204,16 +223,16 @@ local function loadDex()
     local hotbarBg = Instance.new("ImageLabel", hotbarWrap)
     hotbarBg.Size = UDim2.new(1, 0, 1, 0)
     hotbarBg.BackgroundTransparency = 1
-    hotbarBg.Image = "rbxassetid://10651034444" 
+    hotbarBg.Image = "rbxassetid://10651034444"
     hotbarBg.ScaleType = Enum.ScaleType.Stretch
     hotbarBg.ImageColor3 = Color3.fromRGB(180, 200, 255)
 
     local animatedGrid = Instance.new("ImageLabel", hotbarWrap)
     animatedGrid.Size = UDim2.new(1, 0, 1, 0)
     animatedGrid.BackgroundTransparency = 1
-    animatedGrid.Image = "rbxassetid://7151855462" 
+    animatedGrid.Image = "rbxassetid://7151855462"
     animatedGrid.ImageColor3 = Color3.fromRGB(0, 200, 255)
-    animatedGrid.ImageTransparency = 0.8 
+    animatedGrid.ImageTransparency = 0.8
     animatedGrid.ScaleType = Enum.ScaleType.Tile
     animatedGrid.TileSize = UDim2.new(0, 100, 0, 100)
     animatedGrid.ZIndex = 2
@@ -254,7 +273,7 @@ local function loadDex()
     hintTxt.TextStrokeTransparency = 0
     hintTxt.TextTransparency = 1
 
-    -- Loadout Panel (mesmo de antes)
+    -- Loadout Panel
     local loadoutPanel = Instance.new("Frame", gui)
     loadoutPanel.Size = UDim2.new(0, 280, 0, 480)
     loadoutPanel.Position = UDim2.new(0, -350, 0.5, 0)
@@ -276,14 +295,16 @@ local function loadDex()
 
     local function createGradientButton(parent, pos, text, c1, c2)
         local btn = Instance.new("TextButton", parent)
-        btn.Size = UDim2.new(1, -30, 0, 45); btn.Position = pos; btn.BackgroundColor3 = Color3.new(1,1,1)
-        btn.Text = text; btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.GothamBlack; btn.TextSize = 16
+        btn.Size = UDim2.new(1, -30, 0, 45); btn.Position = pos
+        btn.BackgroundColor3 = Color3.new(1,1,1)
+        btn.Text = text; btn.TextColor3 = Color3.new(1,1,1)
+        btn.Font = Enum.Font.GothamBlack; btn.TextSize = 16
         Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
         local grad = Instance.new("UIGradient", btn)
         grad.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, c1), ColorSequenceKeypoint.new(1, c2)}
         local scale = Instance.new("UIScale", btn)
-        btn.MouseEnter:Connect(function() TweenService:Create(scale, tInfoHover, {Scale = 1.06}):Play() end)
-        btn.MouseLeave:Connect(function() TweenService:Create(scale, tInfoHover, {Scale = 1}):Play() end)
+        btn.MouseEnter:Connect(function() TweenService:Create(scale, TweenInfo.new(0.2), {Scale = 1.06}):Play() end)
+        btn.MouseLeave:Connect(function() TweenService:Create(scale, TweenInfo.new(0.2), {Scale = 1}):Play() end)
         return btn
     end
 
@@ -293,12 +314,14 @@ local function loadDex()
     local saveList = Instance.new("ScrollingFrame", loadoutPanel)
     saveList.Size = UDim2.new(1, -30, 1, -240); saveList.Position = UDim2.new(0, 15, 0, 170)
     saveList.BackgroundTransparency = 1; saveList.ScrollBarThickness = 4
+
     local layoutSaves = Instance.new("UIListLayout", saveList)
     layoutSaves.Padding = UDim.new(0, 8)
 
     local toggleMenuBtn = Instance.new("TextButton", hotbarWrap)
     toggleMenuBtn.Size = UDim2.new(0, 60, 0, 60); toggleMenuBtn.Position = UDim2.new(0, 8, 0.5, 0)
-    toggleMenuBtn.AnchorPoint = Vector2.new(0, 0.5); toggleMenuBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
+    toggleMenuBtn.AnchorPoint = Vector2.new(0, 0.5)
+    toggleMenuBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
     toggleMenuBtn.Text = "≡"; toggleMenuBtn.TextColor3 = Color3.fromRGB(0, 220, 255); toggleMenuBtn.TextSize = 40
     toggleMenuBtn.ZIndex = 6
     Instance.new("UICorner", toggleMenuBtn).CornerRadius = UDim.new(0, 14)
@@ -306,10 +329,9 @@ local function loadDex()
 
     local isMenuOpen = false
     toggleMenuBtn.MouseButton1Click:Connect(function()
-        playSound("6895086153", 1)
         isMenuOpen = not isMenuOpen
         local target = isMenuOpen and UDim2.new(0, 20, 0.5, 0) or UDim2.new(0, -350, 0.5, 0)
-        TweenService:Create(loadoutPanel, tInfoSlide, {Position = target}):Play()
+        TweenService:Create(loadoutPanel, TweenInfo.new(0.5, Enum.EasingStyle.Quint), {Position = target}):Play()
     end)
 
     local function cancelPlacement()
@@ -320,18 +342,18 @@ local function loadDex()
             selectedSlot.UIStroke.Color = Color3.fromRGB(60, 60, 80)
             selectedSlot = nil
         end
-        TweenService:Create(hintTxt, tInfoHover, {TextTransparency = 1}):Play()
+        TweenService:Create(hintTxt, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
     end
 
     local function createPreview(towerName)
         if preview then preview:Destroy() end
         if rangeCircle then rangeCircle:Destroy() end
 
-        local folder = getUniversalTowersFolder()
+        local folders = getUniversalTowersFolder()
         local realModel = nil
         local rangeValue = 15
 
-        if folder then
+        for _, folder in ipairs(folders) do
             for _, child in ipairs(folder:GetChildren()) do
                 if getCleanName(child.Name) == towerName then
                     realModel = child
@@ -340,6 +362,7 @@ local function loadDex()
                     break
                 end
             end
+            if realModel then break end
         end
 
         rangeCircle = Instance.new("Part")
@@ -362,8 +385,10 @@ local function loadDex()
             end
             if lowest ~= math.huge then autoOffset = preview:GetPivot().Position.Y - lowest end
         else
-            preview = Instance.new("Part"); preview.Size = Vector3.new(5,5,5); preview.Transparency = 0.4
-            preview.Color = Color3.fromRGB(0, 170, 255); preview.Material = Enum.Material.Neon; autoOffset = 2.5
+            preview = Instance.new("Part")
+            preview.Size = Vector3.new(5,5,5); preview.Transparency = 0.4
+            preview.Color = Color3.fromRGB(0, 170, 255); preview.Material = Enum.Material.Neon
+            autoOffset = 2.5
         end
         preview.Parent = workspace
     end
@@ -391,7 +416,6 @@ local function loadDex()
         elseif input.KeyCode == Enum.KeyCode.X then cancelPlacement()
         elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
             if selectedTower and preview then
-                playSound("876939830", 1)
                 local cf = preview:IsA("Model") and preview:GetPivot() or preview.CFrame
                 ReplicatedStorage:WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(selectedTower, cf)
             end
@@ -404,10 +428,10 @@ local function loadDex()
         card.BackgroundColor3 = Color3.fromRGB(22, 22, 35)
         card.Text = ""; card.AutoButtonColor = false; card.ZIndex = 6
         Instance.new("UICorner", card).CornerRadius = UDim.new(0, 10)
-        
+
         local stroke = Instance.new("UIStroke", card)
         stroke.Thickness = 2.8; stroke.Color = Color3.fromRGB(60, 60, 80)
-        
+
         local grad = Instance.new("UIGradient", card)
         grad.Color = ColorSequence.new{
             ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 45, 65)),
@@ -425,53 +449,61 @@ local function loadDex()
         cost.TextColor3 = Color3.fromRGB(0, 255, 170); cost.Font = Enum.Font.GothamBold; cost.TextScaled = true; cost.ZIndex = 6
 
         local scale = Instance.new("UIScale", card)
-        card.MouseEnter:Connect(function() TweenService:Create(scale, tInfoHover, {Scale = 1.09}):Play() end)
-        card.MouseLeave:Connect(function() TweenService:Create(scale, tInfoHover, {Scale = 1}):Play() end)
+        card.MouseEnter:Connect(function() TweenService:Create(scale, TweenInfo.new(0.2), {Scale = 1.09}):Play() end)
+        card.MouseLeave:Connect(function() TweenService:Create(scale, TweenInfo.new(0.2), {Scale = 1}):Play() end)
 
         card.MouseButton1Click:Connect(function()
-            playSound("138677306", 1); cancelPlacement()
-            selectedTower = unitName; createPreview(unitName)
-            stroke.Color = Color3.fromRGB(0, 255, 255); selectedSlot = card
-            TweenService:Create(hintTxt, tInfoHover, {TextTransparency = 0}):Play()
+            cancelPlacement()
+            selectedTower = unitName
+            createPreview(unitName)
+            stroke.Color = Color3.fromRGB(0, 255, 255)
+            selectedSlot = card
+            TweenService:Create(hintTxt, TweenInfo.new(0.2), {TextTransparency = 0}):Play()
         end)
     end
 
     local function loadTowers()
         for _, v in ipairs(hotbarScroll:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
-        local folder = getUniversalTowersFolder()
-        if folder then
-            local added = {}
+
+        local folders = getUniversalTowersFolder()
+        local added = {}
+        local total = 0
+
+        for _, folder in ipairs(folders) do
             for _, u in ipairs(folder:GetChildren()) do
                 if u:IsA("Model") then
                     local name = getCleanName(u.Name)
                     if not added[name] then
                         createCard(name, getUniversalInfo(u, "price") or getUniversalInfo(u, "cost") or "?")
                         added[name] = true
+                        total += 1
                     end
                 end
             end
         end
+
+        print("✅ Total de torres carregadas no hotbar: " .. total)
     end
 
-    -- Loadout functions (mantidas iguais)
     local function renderSaves()
         for _, v in ipairs(saveList:GetChildren()) do if v:IsA("Frame") then v:Destroy() end end
         for name, towers in pairs(Saves) do
             local f = Instance.new("Frame", saveList)
             f.Size = UDim2.new(1,0,0,45); f.BackgroundColor3 = Color3.fromRGB(30,30,40)
             Instance.new("UICorner", f).CornerRadius = UDim.new(0,10)
-            
+
             local b = Instance.new("TextButton", f)
-            b.Size = UDim2.new(0.75,0,1,0); b.BackgroundTransparency = 1; b.Text = "  "..name
+            b.Size = UDim2.new(0.75,0,1,0); b.BackgroundTransparency = 1; b.Text = " "..name
             b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamBold; b.TextXAlignment = Enum.TextXAlignment.Left
-            
+
             local d = Instance.new("TextButton", f)
             d.Size = UDim2.new(0.25,0,1,0); d.Position = UDim2.new(0.75,0,0,0)
             d.BackgroundTransparency = 1; d.Text = "🗑"; d.TextSize = 18
-            
+
             b.MouseButton1Click:Connect(function()
                 getgenv().SavedTowers = towers; loadTowers()
-                isMenuOpen = false; TweenService:Create(loadoutPanel, tInfoSlide, {Position = UDim2.new(0, -350, 0.5, 0)}):Play()
+                isMenuOpen = false
+                TweenService:Create(loadoutPanel, TweenInfo.new(0.5, Enum.EasingStyle.Quint), {Position = UDim2.new(0, -350, 0.5, 0)}):Play()
             end)
             d.MouseButton1Click:Connect(function() Saves[name] = nil; saveFile(Saves); renderSaves() end)
         end
@@ -479,12 +511,15 @@ local function loadDex()
 
     btnSave.MouseButton1Click:Connect(function()
         if inputLoad.Text ~= "" then
-            local list, added, folder = {}, {}, getUniversalTowersFolder()
-            if folder then
+            local list, added, folders = {}, {}, getUniversalTowersFolder()
+            for _, folder in ipairs(folders) do
                 for _, v in ipairs(folder:GetChildren()) do
                     if v:IsA("Model") then
                         local c = getCleanName(v.Name)
-                        if not added[c] then table.insert(list, c); added[c] = true end
+                        if not added[c] then
+                            table.insert(list, c)
+                            added[c] = true
+                        end
                     end
                 end
             end
@@ -495,14 +530,27 @@ local function loadDex()
     btnReset.MouseButton1Click:Connect(function() getgenv().SavedTowers = {}; loadTowers() end)
 
     local hotbarScale = Instance.new("UIScale", hotbarWrap); hotbarScale.Scale = 0
-    TweenService:Create(hotbarScale, tInfoSlide, {Scale = 1}):Play()
-    playSound("6895086153", 0.5)
+    TweenService:Create(hotbarScale, TweenInfo.new(0.5, Enum.EasingStyle.Quint), {Scale = 1}):Play()
 
-    task.wait(0.4); loadTowers(); renderSaves()
+    playSound = function(id, pitch) -- pequeno fix para som
+        pcall(function()
+            local s = Instance.new("Sound", workspace)
+            s.SoundId = "rbxassetid://" .. id
+            s.Volume = 0.4
+            s.PlaybackSpeed = pitch or 1
+            s:Play()
+            Debris:AddItem(s, 2)
+        end)
+    end
+
+    playSound("6895086153", 0.5)
+    task.wait(0.4)
+    loadTowers()
+    renderSaves()
 end
 
 -- ==========================================
--- KEY SYSTEM (mantido igual)
+-- KEY SYSTEM (inalterada)
 -- ==========================================
 local function validateKey(key)
     if key == "DEV" then return true end
@@ -540,7 +588,6 @@ btn.MouseButton1Click:Connect(function()
     if key == "" then return end
     btn.Text = "VALIDANDO..."
     btn.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
-
     if validateKey(key) then
         saveKeyFile(key)
         btn.Text = "KEY VÁLIDA ✓"
@@ -561,7 +608,6 @@ if savedKey then
     box.Text = savedKey
     btn.Text = "VERIFICANDO KEY SALVA..."
     btn.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
-    
     task.spawn(function()
         if validateKey(savedKey) then
             btn.Text = "LOGIN AUTOMÁTICO ✓"
@@ -580,4 +626,4 @@ if savedKey then
     end)
 end
 
-print("🔐 DEX ULTRA com Detector Melhorado Carregado!")
+print("🔐 DEX ULTRA v5 UNIVERSAL Carregado! Abra o console (F9) para ver as pastas detectadas.")
