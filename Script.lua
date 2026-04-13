@@ -1,5 +1,5 @@
 -- ==========================================
--- 🔐 DEX UNIVERSAL TD: IMAGE HOTBAR + KEY SYSTEM (COM AUTO-SAVE KEY)
+-- 🔐 DEX UNIVERSAL TD: IMAGE HOTBAR + KEY SYSTEM (MELHORADO)
 -- ==========================================
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
@@ -12,7 +12,7 @@ local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
 local API_URL = "https://378a1bde-b6e1-4db4-aff1-0cc7474cfd3c-00-2thtejootj7d7.kirk.replit.dev/validate"
-local KEY_FILE = "Dex_Ultra_Key.txt" -- Nome do arquivo onde a key ficará salva
+local KEY_FILE = "Dex_Ultra_Key.txt"
 
 -- ==========================================
 -- UI DA KEY SYSTEM
@@ -67,7 +67,7 @@ btn.TextSize = 18
 Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 12)
 
 -- ==========================================
--- FUNÇÃO LOAD DEX (O MENU PRINCIPAL)
+-- FUNÇÃO LOAD DEX
 -- ==========================================
 local function loadDex()
     keyGui:Destroy()
@@ -90,21 +90,82 @@ local function loadDex()
     local rotation, heightOffset, autoOffset = 0, 0, 0
     local selectedSlot = nil
 
-    local function getCleanName(rawName)
-        local cleaned = string.gsub(rawName, "[%s_%-]*%d+$", "")
-        return string.gsub(cleaned, "^%d+[%s_%-]*", "")
-    end
-
+    -- ==================== FUNÇÃO DETECTOR MELHORADO (DEX EXPLORER) ====================
     local function getUniversalTowersFolder()
-        local bestFolder, maxModels = nil, 0
-        for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
-            if desc:IsA("Folder") or desc:IsA("Model") then
-                local count = 0
-                for _, child in ipairs(desc:GetChildren()) do if child:IsA("Model") then count += 1 end end
-                if count > maxModels and count >= 3 then maxModels = count; bestFolder = desc end
+        local bestFolder = nil
+        local maxScore = 0
+
+        local searchContainers = {
+            ReplicatedStorage,
+            workspace,
+            game:FindFirstChild("ServerStorage"),
+            game:FindFirstChild("StarterPack"),
+            game:FindFirstChild("StarterGui"),
+        }
+
+        local keywords = {"tower", "unit", "hero", "enemy", "wave", "shop", "buy", "place", "spawn", "tiers", "pack", "models"}
+
+        for _, container in ipairs(searchContainers) do
+            if container then
+                for _, desc in ipairs(container:GetDescendants()) do
+                    if desc:IsA("Folder") or desc:IsA("Model") then
+                        local modelCount = 0
+                        local nameLower = desc.Name:lower()
+
+                        for _, child in ipairs(desc:GetChildren()) do
+                            if child:IsA("Model") then modelCount += 1 end
+                        end
+
+                        local nameScore = 0
+                        for _, kw in ipairs(keywords) do
+                            if nameLower:find(kw) then nameScore += 30 end
+                        end
+
+                        local score = (modelCount * 12) + nameScore
+
+                        if modelCount >= 3 and score > maxScore then
+                            maxScore = score
+                            bestFolder = desc
+                        end
+                    end
+                end
             end
         end
+
+        -- Backup bruto
+        if not bestFolder then
+            for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
+                if (desc:IsA("Folder") or desc:IsA("Model")) and #desc:GetChildren() >= 5 then
+                    bestFolder = desc
+                    break
+                end
+            end
+        end
+
+        if bestFolder then
+            print("✅ DEX EXPLORER encontrou towers em: " .. bestFolder:GetFullName())
+            print("   Quantidade aproximada: " .. #bestFolder:GetChildren())
+        else
+            warn("⚠️ DEX não encontrou nenhuma pasta de towers!")
+        end
+
         return bestFolder
+    end
+
+    local function getCleanName(rawName)
+        local name = rawName
+        name = string.gsub(name, "%[.-%]", "")
+        name = string.gsub(name, "%(.-%)", "")
+        name = string.gsub(name, "[Ll][Vv][Ll]%s*%w*", "")
+        name = string.gsub(name, "[Ll][Ee][Vv][Ee][Ll]%s*%w*", "")
+        name = string.gsub(name, "[Mm][Aa][Xx]", "")
+        name = string.gsub(name, "[Tt][Ii][Ee][Rr]%s*%w+", "")
+        name = string.gsub(name, "[Ss][Tt][Aa][Rr]%s*%w+", "")
+        name = string.gsub(name, "[%s_%-]*%d+$", "")
+        name = string.gsub(name, "^%d+[%s_%-]*", "")
+        name = string.gsub(name, "[_%-]+$", "")
+        name = string.match(name, "^%s*(.-)%s*$") or name
+        return name
     end
 
     local function getUniversalInfo(unit, keyword)
@@ -116,6 +177,7 @@ local function loadDex()
         return nil
     end
 
+    -- ==================== RESTO DO CÓDIGO (UI + Funcionamento) ====================
     local tInfoHover = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
     local tInfoSlide = TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 
@@ -127,7 +189,6 @@ local function loadDex()
         end)
     end
 
-    -- ==================== DEX UI (HOTBAR DE IMAGEM) ====================
     if targetParent:FindFirstChild("DexUltraTD") then targetParent.DexUltraTD:Destroy() end
 
     local gui = Instance.new("ScreenGui")
@@ -140,7 +201,6 @@ local function loadDex()
     hotbarWrap.BackgroundTransparency = 1
     hotbarWrap.ClipsDescendants = true
 
-    -- 🖼️ IMAGEM DA HOTBAR (Estilo Painel Sci-fi)
     local hotbarBg = Instance.new("ImageLabel", hotbarWrap)
     hotbarBg.Size = UDim2.new(1, 0, 1, 0)
     hotbarBg.BackgroundTransparency = 1
@@ -148,7 +208,6 @@ local function loadDex()
     hotbarBg.ScaleType = Enum.ScaleType.Stretch
     hotbarBg.ImageColor3 = Color3.fromRGB(180, 200, 255)
 
-    -- ⚡ EFEITO ANIMADO DE GRADE PASSANDO POR CIMA
     local animatedGrid = Instance.new("ImageLabel", hotbarWrap)
     animatedGrid.Size = UDim2.new(1, 0, 1, 0)
     animatedGrid.BackgroundTransparency = 1
@@ -195,6 +254,7 @@ local function loadDex()
     hintTxt.TextStrokeTransparency = 0
     hintTxt.TextTransparency = 1
 
+    -- Loadout Panel (mesmo de antes)
     local loadoutPanel = Instance.new("Frame", gui)
     loadoutPanel.Size = UDim2.new(0, 280, 0, 480)
     loadoutPanel.Position = UDim2.new(0, -350, 0.5, 0)
@@ -266,6 +326,7 @@ local function loadDex()
     local function createPreview(towerName)
         if preview then preview:Destroy() end
         if rangeCircle then rangeCircle:Destroy() end
+
         local folder = getUniversalTowersFolder()
         local realModel = nil
         local rangeValue = 15
@@ -281,13 +342,15 @@ local function loadDex()
             end
         end
 
-        rangeCircle = Instance.new("Part"); rangeCircle.Size = Vector3.new(rangeValue*2, 0.1, rangeValue*2)
+        rangeCircle = Instance.new("Part")
+        rangeCircle.Size = Vector3.new(rangeValue*2, 0.1, rangeValue*2)
         rangeCircle.Anchored = true; rangeCircle.CanCollide = false; rangeCircle.Transparency = 0.65
         rangeCircle.Color = Color3.fromRGB(0, 255, 180); rangeCircle.Material = Enum.Material.Neon
         Instance.new("CylinderMesh", rangeCircle); rangeCircle.Parent = workspace
 
         if realModel then
-            preview = realModel:Clone(); autoOffset = 0
+            preview = realModel:Clone()
+            autoOffset = 0
             local lowest = math.huge
             for _, v in ipairs(preview:GetDescendants()) do
                 if v:IsA("BasePart") then
@@ -377,14 +440,11 @@ local function loadDex()
         for _, v in ipairs(hotbarScroll:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
         local folder = getUniversalTowersFolder()
         if folder then
-            local added, savedList = {}, getgenv().SavedTowers or {}
-            local hasSave = #savedList > 0
-            
-            for _, n in ipairs(savedList) do added[n] = true end
+            local added = {}
             for _, u in ipairs(folder:GetChildren()) do
                 if u:IsA("Model") then
                     local name = getCleanName(u.Name)
-                    if not added[name] and (not hasSave or added[name]) then
+                    if not added[name] then
                         createCard(name, getUniversalInfo(u, "price") or getUniversalInfo(u, "cost") or "?")
                         added[name] = true
                     end
@@ -393,6 +453,7 @@ local function loadDex()
         end
     end
 
+    -- Loadout functions (mantidas iguais)
     local function renderSaves()
         for _, v in ipairs(saveList:GetChildren()) do if v:IsA("Frame") then v:Destroy() end end
         for name, towers in pairs(Saves) do
@@ -441,41 +502,29 @@ local function loadDex()
 end
 
 -- ==========================================
--- SISTEMA DE KEY E AUTO-LOGIN
+-- KEY SYSTEM (mantido igual)
 -- ==========================================
-
 local function validateKey(key)
     if key == "DEV" then return true end
-
     local success, response = pcall(function()
         return game:HttpGet(API_URL .. "?key=" .. HttpService:UrlEncode(key))
     end)
-
     if not success then return false end
-
-    local decodeSuccess, data = pcall(function()
-        return HttpService:JSONDecode(response)
-    end)
-
+    local decodeSuccess, data = pcall(function() return HttpService:JSONDecode(response) end)
     if not decodeSuccess then return false end
     return data.success == true
 end
 
--- Funções para Salvar/Ler a Key do executor
 local function getSavedKey()
     if isfile and isfile(KEY_FILE) then
         local success, result = pcall(function() return readfile(KEY_FILE) end)
-        if success and result and result ~= "" then
-            return result
-        end
+        if success and result and result ~= "" then return result end
     end
     return nil
 end
 
 local function saveKeyFile(key)
-    if writefile then
-        pcall(function() writefile(KEY_FILE, key) end)
-    end
+    if writefile then pcall(function() writefile(KEY_FILE, key) end) end
 end
 
 local function deleteKeyFile()
@@ -486,7 +535,6 @@ local function deleteKeyFile()
     end
 end
 
--- Lógica do botão de validar
 btn.MouseButton1Click:Connect(function()
     local key = box.Text
     if key == "" then return end
@@ -494,7 +542,7 @@ btn.MouseButton1Click:Connect(function()
     btn.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
 
     if validateKey(key) then
-        saveKeyFile(key) -- SALVA A KEY CASO ELA SEJA VÁLIDA
+        saveKeyFile(key)
         btn.Text = "KEY VÁLIDA ✓"
         btn.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
         task.wait(1)
@@ -508,16 +556,12 @@ btn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ==========================================
--- AUTO LOGIN CHECKER
--- ==========================================
 local savedKey = getSavedKey()
 if savedKey then
     box.Text = savedKey
     btn.Text = "VERIFICANDO KEY SALVA..."
     btn.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
     
-    -- Colocado em thread para não travar a interface
     task.spawn(function()
         if validateKey(savedKey) then
             btn.Text = "LOGIN AUTOMÁTICO ✓"
@@ -525,7 +569,7 @@ if savedKey then
             task.wait(0.5)
             loadDex()
         else
-            deleteKeyFile() -- Apaga a key porque expirou ou é inválida
+            deleteKeyFile()
             btn.Text = "KEY EXPIRADA ✕"
             btn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
             box.Text = ""
@@ -536,4 +580,4 @@ if savedKey then
     end)
 end
 
-print("🔐 Key System com Auto-Login + Hotbar de Imagem Carregados!")
+print("🔐 DEX ULTRA com Detector Melhorado Carregado!")
