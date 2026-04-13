@@ -11,7 +11,7 @@ local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
-local API_URL = "https://a04a2397-dc9a-4629-bcde-3bc0b2fa3290-00-q5hqi5gbysly.worf.replit.dev/validate"
+local API_URL = "https://378a1bde-b6e1-4db4-aff1-0cc7474cfd3c-00-2thtejootj7d7.kirk.replit.dev/validate"
 local KEY_FILE = "Dex_Ultra_Key.txt" -- Nome do arquivo onde a key ficará salva
 
 -- ==========================================
