@@ -1,5 +1,5 @@
 -- ==========================================
--- 🔐 DEX UNIVERSAL TD: IMAGE HOTBAR + KEY SYSTEM (FIXED)
+-- 🔐 DEX UNIVERSAL TD: IMAGE HOTBAR + KEY SYSTEM (COM AUTO-SAVE KEY)
 -- ==========================================
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
@@ -12,6 +12,7 @@ local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
 local API_URL = "https://a04a2397-dc9a-4629-bcde-3bc0b2fa3290-00-q5hqi5gbysly.worf.replit.dev/validate"
+local KEY_FILE = "Dex_Ultra_Key.txt" -- Nome do arquivo onde a key ficará salva
 
 -- ==========================================
 -- UI DA KEY SYSTEM
@@ -52,6 +53,7 @@ box.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 box.TextColor3 = Color3.fromRGB(255, 255, 255)
 box.Font = Enum.Font.Gotham
 box.TextSize = 16
+box.ClearTextOnFocus = false
 Instance.new("UICorner", box).CornerRadius = UDim.new(0, 12)
 
 local btn = Instance.new("TextButton", frame)
@@ -142,7 +144,7 @@ local function loadDex()
     local hotbarBg = Instance.new("ImageLabel", hotbarWrap)
     hotbarBg.Size = UDim2.new(1, 0, 1, 0)
     hotbarBg.BackgroundTransparency = 1
-    hotbarBg.Image = "rbxassetid://10651034444" -- < ID da Imagem da Hotbar
+    hotbarBg.Image = "rbxassetid://10651034444" 
     hotbarBg.ScaleType = Enum.ScaleType.Stretch
     hotbarBg.ImageColor3 = Color3.fromRGB(180, 200, 255)
 
@@ -193,7 +195,6 @@ local function loadDex()
     hintTxt.TextStrokeTransparency = 0
     hintTxt.TextTransparency = 1
 
-    -- Loadout Panel
     local loadoutPanel = Instance.new("Frame", gui)
     loadoutPanel.Size = UDim2.new(0, 280, 0, 480)
     loadoutPanel.Position = UDim2.new(0, -350, 0.5, 0)
@@ -251,7 +252,6 @@ local function loadDex()
         TweenService:Create(loadoutPanel, tInfoSlide, {Position = target}):Play()
     end)
 
-    -- Preview Lógica
     local function cancelPlacement()
         selectedTower = nil
         if preview then preview:Destroy() preview = nil end
@@ -335,7 +335,6 @@ local function loadDex()
         end
     end)
 
-    -- Cards de Tropas
     local function createCard(unitName, priceVal)
         local card = Instance.new("TextButton", hotbarScroll)
         card.Size = UDim2.new(0, 95, 0, 115)
@@ -442,10 +441,10 @@ local function loadDex()
 end
 
 -- ==========================================
--- VALIDAÇÃO DA KEY (SEGURA E A PROVA DE CRASH)
+-- SISTEMA DE KEY E AUTO-LOGIN
 -- ==========================================
+
 local function validateKey(key)
-    -- 🔑 BYPASS MASTER (Senha mestre para desenvolvedor)
     if key == "DEV" then return true end
 
     local success, response = pcall(function()
@@ -454,19 +453,40 @@ local function validateKey(key)
 
     if not success then return false end
 
-    -- Tenta decodificar o JSON. Se o Replit estiver dormindo, ele manda HTML e isso evita o crash!
     local decodeSuccess, data = pcall(function()
         return HttpService:JSONDecode(response)
     end)
 
-    if not decodeSuccess then
-        warn("A API do Replit parece estar desligada (retornou HTML ao invés de JSON).")
-        return false
-    end
-
+    if not decodeSuccess then return false end
     return data.success == true
 end
 
+-- Funções para Salvar/Ler a Key do executor
+local function getSavedKey()
+    if isfile and isfile(KEY_FILE) then
+        local success, result = pcall(function() return readfile(KEY_FILE) end)
+        if success and result and result ~= "" then
+            return result
+        end
+    end
+    return nil
+end
+
+local function saveKeyFile(key)
+    if writefile then
+        pcall(function() writefile(KEY_FILE, key) end)
+    end
+end
+
+local function deleteKeyFile()
+    if delfile and isfile and isfile(KEY_FILE) then
+        pcall(function() delfile(KEY_FILE) end)
+    elseif writefile then
+        pcall(function() writefile(KEY_FILE, "") end)
+    end
+end
+
+-- Lógica do botão de validar
 btn.MouseButton1Click:Connect(function()
     local key = box.Text
     if key == "" then return end
@@ -474,6 +494,7 @@ btn.MouseButton1Click:Connect(function()
     btn.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
 
     if validateKey(key) then
+        saveKeyFile(key) -- SALVA A KEY CASO ELA SEJA VÁLIDA
         btn.Text = "KEY VÁLIDA ✓"
         btn.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
         task.wait(1)
@@ -487,4 +508,32 @@ btn.MouseButton1Click:Connect(function()
     end
 end)
 
-print("🔐 Key System (A prova de falhas) + Hotbar de Imagem Carregados!")
+-- ==========================================
+-- AUTO LOGIN CHECKER
+-- ==========================================
+local savedKey = getSavedKey()
+if savedKey then
+    box.Text = savedKey
+    btn.Text = "VERIFICANDO KEY SALVA..."
+    btn.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
+    
+    -- Colocado em thread para não travar a interface
+    task.spawn(function()
+        if validateKey(savedKey) then
+            btn.Text = "LOGIN AUTOMÁTICO ✓"
+            btn.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+            task.wait(0.5)
+            loadDex()
+        else
+            deleteKeyFile() -- Apaga a key porque expirou ou é inválida
+            btn.Text = "KEY EXPIRADA ✕"
+            btn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+            box.Text = ""
+            task.wait(1.5)
+            btn.Text = "VALIDAR KEY"
+            btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+        end
+    end)
+end
+
+print("🔐 Key System com Auto-Login + Hotbar de Imagem Carregados!")
